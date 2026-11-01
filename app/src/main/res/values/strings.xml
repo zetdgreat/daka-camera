@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">打卡相机</string>
+    <string name="shutter_desc">拍照</string>
+    <string name="switch_camera_desc">切换前后摄像头</string>
+    <string name="verify_entry_desc">防伪验真</string>
+</resources>

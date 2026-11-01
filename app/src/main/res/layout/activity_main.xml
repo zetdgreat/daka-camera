@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000">
+
+    <androidx.camera.view.PreviewView
+        android:id="@+id/previewView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <TextView
+        android:id="@+id/statusChip"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="52dp"
+        android:background="@drawable/bg_chip"
+        android:paddingStart="16dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="8dp"
+        android:textColor="#FFFFFF"
+        android:textSize="13sp"
+        android:visibility="gone" />
+
+    <ImageButton
+        android:id="@+id/verifyEntry"
+        android:layout_width="46dp"
+        android:layout_height="46dp"
+        android:layout_gravity="top|end"
+        android:layout_margin="16dp"
+        android:background="@null"
+        android:contentDescription="@string/verify_entry_desc"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_verify" />
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="150dp"
+        android:layout_gravity="bottom">
+
+        <ImageButton
+            android:id="@+id/shutter"
+            android:layout_width="86dp"
+            android:layout_height="86dp"
+            android:layout_gravity="bottom|center_horizontal"
+            android:layout_marginBottom="30dp"
+            android:background="@null"
+            android:contentDescription="@string/shutter_desc"
+            android:src="@drawable/ic_shutter" />
+
+        <ImageButton
+            android:id="@+id/switchCamera"
+            android:layout_width="54dp"
+            android:layout_height="54dp"
+            android:layout_gravity="bottom|end"
+            android:layout_marginEnd="36dp"
+            android:layout_marginBottom="46dp"
+            android:background="@null"
+            android:contentDescription="@string/switch_camera_desc"
+            android:src="@drawable/ic_switch_camera" />
+    </FrameLayout>
+
+</FrameLayout>
