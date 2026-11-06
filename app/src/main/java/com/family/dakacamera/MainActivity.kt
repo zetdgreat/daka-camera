@@ -13,6 +13,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.ArrayAdapter
+import android.widget.EditText
 import android.widget.ListView
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -265,6 +266,16 @@ class MainActivity : AppCompatActivity() {
         val empty = view.findViewById<TextView>(R.id.poiEmpty)
         val listView = view.findViewById<ListView>(R.id.poiList)
         val retry = view.findViewById<TextView>(R.id.poiRetry)
+        val source = view.findViewById<TextView>(R.id.poiSource)
+        val amapKeyButton = view.findViewById<TextView>(R.id.poiAmapKey)
+
+        fun updateSourceLabel() {
+            source.text = getString(
+                if (AppSettings.resolveAmapKey(this).isNotBlank()) R.string.data_source_amap
+                else R.string.data_source_osm
+            )
+        }
+        updateSourceLabel()
 
         var adapter: PoiAdapter? = null
         val dialog = AlertDialog.Builder(this).setView(view).create()
@@ -289,7 +300,7 @@ class MainActivity : AppCompatActivity() {
 
         fun doSearch(lat: Double, lng: Double) {
             showLoading("正在搜索附近 300 米的地点…")
-            poiSearch = PoiSearch.search(lat, lng, object : PoiSearch.Callback {
+            poiSearch = PoiSearch.search(this@MainActivity, lat, lng, object : PoiSearch.Callback {
                 override fun onResult(items: List<PoiItem>, truncated: Boolean) {
                     if (!dialog.isShowing) return
                     progress.visibility = View.GONE
@@ -352,6 +363,12 @@ class MainActivity : AppCompatActivity() {
             dialog.dismiss()
         }
         retry.setOnClickListener { startSearch() }
+        amapKeyButton.setOnClickListener {
+            showAmapKeyDialog {
+                updateSourceLabel()
+                startSearch()
+            }
+        }
         view.findViewById<View>(R.id.poiCancel).setOnClickListener { dialog.dismiss() }
         dialog.setOnDismissListener {
             poiSearch?.cancel()
@@ -362,6 +379,30 @@ class MainActivity : AppCompatActivity() {
         poiDialog = dialog
         dialog.show()
         startSearch()
+    }
+
+    /** 高德 Key 设置:只保存在本机,公开仓库/公开 APK 均不包含 Key */
+    private fun showAmapKeyDialog(onSaved: () -> Unit) {
+        val view = layoutInflater.inflate(R.layout.dialog_amap_key, null)
+        val input = view.findViewById<EditText>(R.id.amapKeyInput)
+        input.setText(AppSettings.getAmapKey(this))
+        val dialog = AlertDialog.Builder(this).setView(view).create()
+
+        view.findViewById<View>(R.id.amapKeyClear).setOnClickListener {
+            AppSettings.setAmapKey(this, "")
+            toast("已清除高德 Key,将使用 OpenStreetMap")
+            dialog.dismiss()
+            onSaved()
+        }
+        view.findViewById<View>(R.id.amapKeyCancel).setOnClickListener { dialog.dismiss() }
+        view.findViewById<View>(R.id.amapKeySave).setOnClickListener {
+            val key = input.text?.toString()?.trim().orEmpty()
+            AppSettings.setAmapKey(this, key)
+            toast(if (key.isBlank()) "已清空,将使用 OpenStreetMap" else "已保存高德 Key")
+            dialog.dismiss()
+            onSaved()
+        }
+        dialog.show()
     }
 
     /** 地点列表适配器(复用 convertView,避免列表过长时频繁 inflate) */

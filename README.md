@@ -11,7 +11,7 @@
 - 🕘 **左下角水印**:黄色「打卡」徽标 + 大号时间 + 详细地址(最多两行)+ 日期星期,底部小字「打卡相机已验证 | 时间地点真实」
 - 🔐 **右下角防伪码**:20 位自包含防伪码(分组显示,如 `AB12-CD34-EF56-GH78-JK90`)
 - ✅ **验真页**:输入防伪码,显示该照片拍摄时的真实时间、经纬度、地址
-- 🎯 **定位校准**:一键列出附近 300 米内的地点,按距离由近到远排列,可手动选择;列表加载全程异步、带超时与取消,地点再多也不会卡界面
+- 🎯 **定位校准**:一键列出附近 300 米内的地点,按距离由近到远排列,可手动选择;列表加载全程异步、带超时与取消,地点再多也不会卡界面;高德 Key 可直接在 App 内填写(公开 APK 不含任何 Key)
 - 💾 **自动保存**:照片存入系统相册「打卡相机」文件夹,JPEG 质量 95
 - 📍 **无网也能拍**:定位/地址解析失败时自动降级显示经纬度;没有定位权限也能正常拍照(水印显示「无定位信息」)
 
@@ -52,14 +52,22 @@ echo "sdk.dir=/path/to/Android/sdk" > local.properties
 
 ### 可选:高德地点数据
 
-默认使用 OpenStreetMap(Nominatim,免注册;国内尤其是乡镇的 POI 覆盖可能较少,列表可能为空)。如需更准的地点与地址:
+默认使用 OpenStreetMap(Nominatim,免注册;国内尤其是乡镇的 POI 覆盖可能较少,列表可能为空)。
+
+**方式一(推荐,适合开源使用者):在 App 内填写**
+
+「定位校准 → 高德 Key」→ 粘贴 Key → 保存。Key 只保存在本机 `SharedPreferences`,不会上传,也不会进入仓库或公开 APK。每台设备单独填写一次即可。
+
+**方式二(私有构建):打包时内置**
 
 ```properties
 # local.properties
 daka.amapKey=你的高德「Web 服务」key
 ```
 
-也支持环境变量 `DAKA_AMAP_KEY`。配置后「附近地点」和自动地址解析均使用高德 Web 服务 API;不配置则使用 OSM + 系统 Geocoder。
+也支持环境变量 `DAKA_AMAP_KEY`。注意:内置的 Key 会进入 APK,公开发布前请勿配置。
+
+Key 必须是高德开放平台中「服务平台 = Web 服务」类型的 Key(Android 平台 Key 不能用于本项目的 REST 调用)。
 
 ### 签名(可选)
 
@@ -96,6 +104,7 @@ app/src/main/java/com/family/dakacamera/
 ├── AntiFakeCode.kt        # 防伪码编解码(纯 JVM,可单测)
 ├── LocationHelper.kt      # 定位 + 逆地理编码(系统 Geocoder / 可选高德)
 ├── PoiSearch.kt           # 附近 300 米地点搜索(OSM / 可选高德,异步可取消)
+├── AppSettings.kt         # 本机设置(高德 Key 等,SharedPreferences)
 ├── GeoUtils.kt            # Haversine 距离计算
 ├── MediaStoreSaver.kt     # 保存到相册(MediaStore / 旧版兼容)
 └── VerifyActivity.kt      # 验真页
@@ -107,6 +116,7 @@ app/src/main/java/com/family/dakacamera/
 - 联网仅用于以下两件事:
   - 「定位校准」搜索附近 300 米地点:请求只包含当前经纬度。默认发送给 OpenStreetMap Nominatim;配置高德 key 后发送给高德
   - 配置高德 key 时,自动地址解析也走高德逆地理编码
+- 高德 Key 只保存在本机 `SharedPreferences`,仅作为请求参数发送给高德;仓库与公开 APK 均不包含 Key
 - 照片、防伪码不会被上传;没有账号、统计和广告
 - 地址解析优先使用系统 `Geocoder`(国内无 GMS 机型常常不可用,此时自动降级显示经纬度;配置高德 key 后改用高德,地址更准)
 - 所有照片只保存在本机相册
@@ -124,6 +134,7 @@ app/src/main/java/com/family/dakacamera/
 
 ## 更新日志
 
+- **v1.2**:高德 Key 改为 App 内填写(公开 APK 与仓库不含 Key);配置高德后自动地址解析也走高德
 - **v1.1**:实时水印预览;定位校准(附近 300 米地点,OSM 默认 / 高德可选);新增联网权限
 - **v1.0**:首个版本
 

@@ -14,4 +14,14 @@
     <string name="use_auto_location">恢复自动定位</string>
     <string name="retry">重试</string>
     <string name="cancel">取消</string>
+
+    <!-- 高德 Key 设置 -->
+    <string name="amap_key">高德 Key</string>
+    <string name="data_source_osm">数据源:OpenStreetMap(免注册)</string>
+    <string name="data_source_amap">数据源:高德 Web 服务</string>
+    <string name="amap_key_title">高德 Web 服务 Key</string>
+    <string name="amap_key_hint">在高德开放平台(lbs.amap.com)控制台创建「服务平台 = Web 服务」的 Key 后填入。留空则使用 OpenStreetMap。Key 仅保存在本机,不会上传,也不会进入开源仓库。</string>
+    <string name="amap_key_input_hint">粘贴 32 位 Key</string>
+    <string name="save">保存</string>
+    <string name="clear">清除</string>
 </resources>

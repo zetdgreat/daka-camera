@@ -1,5 +1,6 @@
 package com.family.dakacamera
 
+import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import org.json.JSONArray
@@ -29,7 +30,7 @@ data class PoiItem(
  * 300 米内地点搜索。
  *
  * 数据源:
- *  - 配置了 `daka.amapKey`(或环境变量 DAKA_AMAP_KEY)时用高德 Web 服务 API(国内最准);
+ *  - App 内填写了高德 Key(或私有构建时配置了 daka.amapKey)时用高德 Web 服务 API(国内最准);
  *  - 否则用 OpenStreetMap Nominatim(免注册,国内乡镇覆盖可能较少)。
  *
  * 防卡死设计:全部网络请求在后台线程;连接/读取超时;分页与结果数有上限;
@@ -69,12 +70,13 @@ object PoiSearch {
         }
     }
 
-    fun search(lat: Double, lng: Double, callback: Callback): Cancellable {
+    fun search(context: Context, lat: Double, lng: Double, callback: Callback): Cancellable {
         val cancellable = Cancellable()
+        val amapKey = AppSettings.resolveAmapKey(context)
         Thread {
             try {
                 val (items, truncated) =
-                    if (BuildConfig.AMAP_KEY.isNotBlank()) searchAmap(cancellable, lat, lng)
+                    if (amapKey.isNotBlank()) searchAmap(cancellable, amapKey, lat, lng)
                     else searchOsm(cancellable, lat, lng)
                 if (cancellable.cancelled) return@Thread
                 mainHandler.post {
@@ -138,10 +140,11 @@ object PoiSearch {
 
     private fun searchAmap(
         c: Cancellable,
+        apiKey: String,
         lat: Double,
         lng: Double,
     ): Pair<List<PoiItem>, Boolean> {
-        val key = URLEncoder.encode(BuildConfig.AMAP_KEY, "UTF-8")
+        val key = URLEncoder.encode(apiKey, "UTF-8")
         val items = ArrayList<PoiItem>()
         var total = 0
         var page = 1

@@ -12,7 +12,11 @@ import android.os.Handler
 import android.os.Looper
 import androidx.core.content.ContextCompat
 import androidx.core.location.LocationManagerCompat
+import org.json.JSONObject
 import java.io.IOException
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLEncoder
 import java.util.Locale
 
 /**
@@ -138,8 +142,47 @@ class LocationHelper(private val ctx: Context) {
         }.maxByOrNull { it.time }
 
     companion object {
-        /** 逆地理编码。必须在后台线程调用;失败返回 null(国内无 GMS 机型属常态)。 */
+        /**
+         * 逆地理编码。必须在后台线程调用。
+         * 配置了高德 Key(App 内或私有构建)时优先走高德,失败回退系统 Geocoder。
+         */
         fun reverseGeocode(ctx: Context, lat: Double, lng: Double): String? {
+            val amapKey = AppSettings.resolveAmapKey(ctx)
+            if (amapKey.isNotBlank()) {
+                amapReverseGeocode(amapKey, lat, lng)?.let { return it }
+            }
+            return systemReverseGeocode(ctx, lat, lng)
+        }
+
+        private fun amapReverseGeocode(key: String, lat: Double, lng: Double): String? {
+            var conn: HttpURLConnection? = null
+            return try {
+                val url = URL(
+                    "https://restapi.amap.com/v3/geocode/regeo?key=" +
+                            URLEncoder.encode(key, "UTF-8") +
+                            "&location=$lng,$lat&extensions=base"
+                )
+                conn = (url.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 5_000
+                    readTimeout = 5_000
+                    setRequestProperty("Accept", "application/json")
+                }
+                val body = conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                val root = JSONObject(body)
+                if (root.optString("status") != "1") return null
+                root.optJSONObject("regeocode")
+                    ?.optString("formatted_address")
+                    ?.takeIf { it.isNotBlank() && it != "[]" }
+            } catch (t: Throwable) {
+                null
+            } finally {
+                runCatching { conn?.disconnect() }
+            }
+        }
+
+        /** 系统 Geocoder:国内无 GMS 机型常常不可用,失败返回 null。 */
+        private fun systemReverseGeocode(ctx: Context, lat: Double, lng: Double): String? {
             return try {
                 if (!Geocoder.isPresent()) return null
                 @Suppress("DEPRECATION")
