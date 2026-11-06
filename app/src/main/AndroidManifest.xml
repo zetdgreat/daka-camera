@@ -4,6 +4,8 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- 仅用于「附近地点」搜索与可选的高德地址解析;不上传照片 -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <!-- API 28 及以下写入公共相册需要;API 29+ 走 MediaStore 不需要任何存储权限 -->
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"

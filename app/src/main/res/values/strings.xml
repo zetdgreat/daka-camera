@@ -4,4 +4,14 @@
     <string name="shutter_desc">拍照</string>
     <string name="switch_camera_desc">切换前后摄像头</string>
     <string name="verify_entry_desc">防伪验真</string>
+
+    <!-- 定位校准 -->
+    <string name="calibrate_location">定位校准</string>
+    <string name="pick_location_title">选择打卡位置</string>
+    <string name="pick_location_hint">显示您附近 300 米内的地点,由近到远排列</string>
+    <string name="searching_nearby">正在搜索附近 300 米的地点…</string>
+    <string name="no_nearby_location">附近 300 米内未找到地点\n可点击「重试」,或使用自动定位</string>
+    <string name="use_auto_location">恢复自动定位</string>
+    <string name="retry">重试</string>
+    <string name="cancel">取消</string>
 </resources>

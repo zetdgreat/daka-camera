@@ -9,12 +9,18 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
+    <!-- 实时水印层:与成片共用同一套绘制逻辑 -->
+    <com.family.dakacamera.WatermarkOverlayView
+        android:id="@+id/watermarkOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
     <TextView
         android:id="@+id/statusChip"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="top|center_horizontal"
-        android:layout_marginTop="52dp"
+        android:layout_marginTop="68dp"
         android:background="@drawable/bg_chip"
         android:paddingStart="16dp"
         android:paddingTop="8dp"
@@ -34,6 +40,23 @@
         android:contentDescription="@string/verify_entry_desc"
         android:scaleType="fitCenter"
         android:src="@drawable/ic_verify" />
+
+    <TextView
+        android:id="@+id/calibrateLocation"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:layout_margin="16dp"
+        android:background="@drawable/bg_chip"
+        android:clickable="true"
+        android:focusable="true"
+        android:paddingStart="14dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="14dp"
+        android:paddingBottom="8dp"
+        android:text="@string/calibrate_location"
+        android:textColor="#FFFFFF"
+        android:textSize="13sp" />
 
     <FrameLayout
         android:layout_width="match_parent"

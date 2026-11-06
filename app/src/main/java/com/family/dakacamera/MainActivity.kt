@@ -1,14 +1,24 @@
 package com.family.dakacamera
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
+import android.widget.ArrayAdapter
+import android.widget.ListView
+import android.widget.ProgressBar
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.family.dakacamera.databinding.ActivityMainBinding
@@ -23,6 +33,21 @@ class MainActivity : AppCompatActivity() {
     private lateinit var locationHelper: LocationHelper
     private var capturing = false
 
+    /** 用户手动校准选中的地点(会话内有效;离开 500 米自动失效) */
+    private var manualLocation: PoiItem? = null
+    private var poiDialog: AlertDialog? = null
+    private var poiSearch: PoiSearch.Cancellable? = null
+
+    private val overlayHandler = Handler(Looper.getMainLooper())
+    private var overlayMinute = -1L
+    private var overlayLocationKey = ""
+    private val overlayTicker = object : Runnable {
+        override fun run() {
+            updateOverlayIfNeeded()
+            overlayHandler.postDelayed(this, 1_000)
+        }
+    }
+
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) {
@@ -35,6 +60,7 @@ class MainActivity : AppCompatActivity() {
             toast("需要相机权限才能拍照")
         }
         if (locationHelper.hasPermission()) resolveLocation()
+        updateOverlayIfNeeded(force = true)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -53,6 +79,7 @@ class MainActivity : AppCompatActivity() {
         binding.verifyEntry.setOnClickListener {
             startActivity(Intent(this, VerifyActivity::class.java))
         }
+        binding.calibrateLocation.setOnClickListener { showLocationPicker() }
 
         requestPermissionsIfNeeded()
     }
@@ -60,6 +87,23 @@ class MainActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         if (locationHelper.hasPermission()) resolveLocation()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        updateOverlayIfNeeded(force = true)
+        overlayHandler.post(overlayTicker)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        overlayHandler.removeCallbacks(overlayTicker)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        overlayHandler.removeCallbacksAndMessages(null)
+        poiSearch?.cancel()
     }
 
     // ---------------- 权限 ----------------
@@ -85,15 +129,57 @@ class MainActivity : AppCompatActivity() {
     // ---------------- 定位 ----------------
 
     private fun resolveLocation() {
-        if (!locationHelper.hasPermission()) return
+        if (!locationHelper.hasPermission()) {
+            updateOverlayIfNeeded(force = true)
+            return
+        }
         showChip("定位中…")
         locationHelper.resolve { info ->
             if (info != null) {
                 hideChip()
+                autoClearManualIfMoved(info)
             } else {
                 showChip("未获取到定位,水印将显示无定位信息")
             }
+            updateOverlayIfNeeded(force = true)
         }
+    }
+
+    /** 真实位置远离手动校准点时,自动恢复自动定位,避免用到过期位置 */
+    private fun autoClearManualIfMoved(info: LocationHelper.Info) {
+        val manual = manualLocation ?: return
+        if (GeoUtils.distanceMeters(info.lat, info.lng, manual.lat, manual.lng) > 500.0) {
+            manualLocation = null
+            toast("已离开手动选择的位置,恢复自动定位")
+        }
+    }
+
+    /** 当前生效的位置:手动校准优先,其次自动定位 */
+    private fun effectiveLocation(): LocationHelper.Info? =
+        manualLocation?.let {
+            LocationHelper.Info(it.lat, it.lng, it.watermarkText(), System.currentTimeMillis())
+        } ?: locationHelper.last
+
+    // ---------------- 实时水印预览 ----------------
+
+    private fun updateOverlayIfNeeded(force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        val minute = now / 60_000L
+        val loc = effectiveLocation()
+        val locKey = if (loc == null) "none"
+        else "${loc.lat},${loc.lng},${loc.addressText}"
+        if (!force && minute == overlayMinute && locKey == overlayLocationKey) return
+        overlayMinute = minute
+        overlayLocationKey = locKey
+
+        val lat = loc?.lat ?: 0.0
+        val lng = loc?.lng ?: 0.0
+        binding.watermarkOverlay.data = WatermarkData(
+            timeText = SimpleDateFormat("HH:mm", Locale.CHINA).format(Date(now)),
+            dateText = SimpleDateFormat("yyyy.MM.dd EEEE", Locale.CHINA).format(Date(now)),
+            address = loc?.addressText ?: "无定位信息",
+            code = AntiFakeCode.encode(now / 1000, lat, lng)
+        )
     }
 
     // ---------------- 拍照 ----------------
@@ -103,7 +189,7 @@ class MainActivity : AppCompatActivity() {
         capturing = true
         binding.shutter.isEnabled = false
 
-        val cached = locationHelper.last
+        val cached = effectiveLocation()
         val fresh = cached != null && System.currentTimeMillis() - cached.timeMs < 90_000
         if (fresh) {
             captureWith(cached)
@@ -112,8 +198,13 @@ class MainActivity : AppCompatActivity() {
         } else {
             showChip("定位中…")
             locationHelper.resolve { info ->
-                if (info != null) hideChip() else showChip("未获取到定位,水印将显示无定位信息")
-                captureWith(info)
+                if (info != null) {
+                    hideChip()
+                    autoClearManualIfMoved(info)
+                } else {
+                    showChip("未获取到定位,水印将显示无定位信息")
+                }
+                captureWith(info ?: effectiveLocation())
             }
         }
     }
@@ -146,6 +237,7 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread {
                     toast(if (ok) "已保存到相册「打卡相机」" else "保存失败")
                     finishCapture()
+                    updateOverlayIfNeeded(force = true)
                     if (locationHelper.hasPermission()) resolveLocation() // 为下一张刷新定位
                 }
             } catch (t: Throwable) {
@@ -160,6 +252,138 @@ class MainActivity : AppCompatActivity() {
     private fun finishCapture() {
         capturing = false
         binding.shutter.isEnabled = true
+    }
+
+    // ---------------- 定位校准 ----------------
+
+    private fun showLocationPicker() {
+        if (poiDialog?.isShowing == true) return
+
+        val view = layoutInflater.inflate(R.layout.dialog_location_picker, null)
+        val progress = view.findViewById<ProgressBar>(R.id.poiProgress)
+        val status = view.findViewById<TextView>(R.id.poiStatus)
+        val empty = view.findViewById<TextView>(R.id.poiEmpty)
+        val listView = view.findViewById<ListView>(R.id.poiList)
+        val retry = view.findViewById<TextView>(R.id.poiRetry)
+
+        var adapter: PoiAdapter? = null
+        val dialog = AlertDialog.Builder(this).setView(view).create()
+
+        fun showLoading(text: String) {
+            progress.visibility = View.VISIBLE
+            status.visibility = View.VISIBLE
+            status.text = text
+            empty.visibility = View.GONE
+            retry.visibility = View.GONE
+            listView.visibility = View.GONE
+        }
+
+        fun showError(message: String) {
+            progress.visibility = View.GONE
+            status.visibility = View.VISIBLE
+            status.text = message
+            empty.visibility = View.GONE
+            retry.visibility = View.VISIBLE
+            listView.visibility = View.GONE
+        }
+
+        fun doSearch(lat: Double, lng: Double) {
+            showLoading("正在搜索附近 300 米的地点…")
+            poiSearch = PoiSearch.search(lat, lng, object : PoiSearch.Callback {
+                override fun onResult(items: List<PoiItem>, truncated: Boolean) {
+                    if (!dialog.isShowing) return
+                    progress.visibility = View.GONE
+                    if (items.isEmpty()) {
+                        status.visibility = View.GONE
+                        empty.visibility = View.VISIBLE
+                        retry.visibility = View.VISIBLE
+                        listView.visibility = View.GONE
+                        return
+                    }
+                    status.visibility = View.VISIBLE
+                    status.text = buildString {
+                        append("共 ${items.size} 个地点,由近到远")
+                        if (truncated) append("(已达显示上限)")
+                    }
+                    empty.visibility = View.GONE
+                    retry.visibility = View.GONE
+                    val a = PoiAdapter(this@MainActivity, items)
+                    adapter = a
+                    listView.adapter = a
+                    listView.visibility = View.VISIBLE
+                }
+
+                override fun onError(message: String) {
+                    if (!dialog.isShowing) return
+                    showError(message)
+                }
+            })
+        }
+
+        fun startSearch() {
+            poiSearch?.cancel()
+            poiSearch = null
+            val last = locationHelper.last
+            if (last != null && System.currentTimeMillis() - last.timeMs < 60_000) {
+                doSearch(last.lat, last.lng)
+            } else if (!locationHelper.hasPermission()) {
+                showError("未获得定位权限,无法搜索附近地点")
+            } else {
+                showLoading("正在获取当前位置…")
+                locationHelper.resolve { info ->
+                    if (!dialog.isShowing) return@resolve
+                    if (info == null) showError("未获取到当前位置,请稍后重试")
+                    else doSearch(info.lat, info.lng)
+                }
+            }
+        }
+
+        listView.setOnItemClickListener { _, _, position, _ ->
+            val item = adapter?.getItem(position) ?: return@setOnItemClickListener
+            manualLocation = item
+            updateOverlayIfNeeded(force = true)
+            toast("已选择:${item.name}")
+            dialog.dismiss()
+        }
+        view.findViewById<View>(R.id.poiReset).setOnClickListener {
+            manualLocation = null
+            updateOverlayIfNeeded(force = true)
+            toast("已恢复自动定位")
+            dialog.dismiss()
+        }
+        retry.setOnClickListener { startSearch() }
+        view.findViewById<View>(R.id.poiCancel).setOnClickListener { dialog.dismiss() }
+        dialog.setOnDismissListener {
+            poiSearch?.cancel()
+            poiSearch = null
+            poiDialog = null
+        }
+
+        poiDialog = dialog
+        dialog.show()
+        startSearch()
+    }
+
+    /** 地点列表适配器(复用 convertView,避免列表过长时频繁 inflate) */
+    private class PoiAdapter(
+        context: Context,
+        private val items: List<PoiItem>,
+    ) : ArrayAdapter<PoiItem>(context, R.layout.item_poi, items) {
+
+        override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+            val view = convertView
+                ?: LayoutInflater.from(context).inflate(R.layout.item_poi, parent, false)
+            val item = items[position]
+            view.findViewById<TextView>(R.id.poiName).text = item.name
+            view.findViewById<TextView>(R.id.poiDetail).text = buildString {
+                append(String.format(Locale.US, "%.0f 米", item.distanceMeters))
+                if (item.address.isNotBlank()) {
+                    append(" · ")
+                    append(item.address)
+                }
+            }
+            return view
+        }
     }
 
     // ---------------- 小工具 ----------------

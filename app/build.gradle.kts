@@ -19,6 +19,12 @@ val releaseStoreFile = signingValue("daka.storeFile", "DAKA_STORE_FILE")
     ?.let { rootProject.file(it) }
 val hasReleaseSigning = releaseStoreFile?.exists() == true
 
+// 可选:高德「Web 服务」key。留空时地点搜索使用 OpenStreetMap(Nominatim)。
+val amapKey = (localProps.getProperty("daka.amapKey") ?: System.getenv("DAKA_AMAP_KEY") ?: "")
+    .trim()
+    .replace("\\", "\\\\")
+    .replace("\"", "\\\"")
+
 android {
     namespace = "com.family.dakacamera"
     compileSdk = 36
@@ -28,8 +34,10 @@ android {
         applicationId = "com.family.dakacamera"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
+
+        buildConfigField("String", "AMAP_KEY", "\"$amapKey\"")
     }
 
     signingConfigs {
@@ -69,6 +77,7 @@ android {
 
     buildFeatures {
         viewBinding = true
+        buildConfig = true
     }
 }
 
