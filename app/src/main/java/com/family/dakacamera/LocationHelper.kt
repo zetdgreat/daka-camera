@@ -102,30 +102,37 @@ class LocationHelper(private val ctx: Context) {
             }.start()
         }
 
-        val provider = when {
-            runCatching { lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER) }.getOrDefault(false) ->
-                LocationManager.NETWORK_PROVIDER
-            runCatching { lm.isProviderEnabled(LocationManager.GPS_PROVIDER) }.getOrDefault(false) ->
-                LocationManager.GPS_PROVIDER
-            else -> null
+        // 同时向网络定位与 GPS 请求:某些设备(或模拟器)的网络 provider
+        // 虽然存在却不返回结果,并行请求 GPS 可避免白等 5 秒后拿不到位置。
+        val providers = buildList {
+            if (runCatching { lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER) }.getOrDefault(false)) {
+                add(LocationManager.NETWORK_PROVIDER)
+            }
+            if (runCatching { lm.isProviderEnabled(LocationManager.GPS_PROVIDER) }.getOrDefault(false)) {
+                add(LocationManager.GPS_PROVIDER)
+            }
         }
-        if (provider == null) {
+        if (providers.isEmpty()) {
             deliver(best)
             return
         }
 
-        val signal = CancellationSignal()
+        val signals = providers.map { CancellationSignal() }
         Handler(Looper.getMainLooper()).postDelayed({
-            signal.cancel()
+            signals.forEach { runCatching { it.cancel() } }
             deliver(best) // 超时:回落到最近已知位置
         }, 5000)
 
-        try {
-            LocationManagerCompat.getCurrentLocation(
-                lm, provider, signal, ContextCompat.getMainExecutor(ctx)
-            ) { loc -> deliver(loc ?: best) }
-        } catch (t: Throwable) {
-            deliver(best)
+        providers.forEachIndexed { index, provider ->
+            try {
+                LocationManagerCompat.getCurrentLocation(
+                    lm, provider, signals[index], ContextCompat.getMainExecutor(ctx)
+                ) { loc ->
+                    if (loc != null) deliver(loc)
+                }
+            } catch (t: Throwable) {
+                // 单个 provider 失败不影响其他 provider
+            }
         }
     }
 

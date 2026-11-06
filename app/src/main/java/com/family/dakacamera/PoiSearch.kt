@@ -8,9 +8,7 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
-import java.util.Locale
 import kotlin.math.ceil
-import kotlin.math.cos
 
 /** 附近地点 */
 data class PoiItem(
@@ -27,7 +25,7 @@ data class PoiItem(
 }
 
 /**
- * 300 米内地点搜索。
+ * 指定半径内的地点搜索(半径可在设置中选择 100~500 米)。
  *
  * 数据源:
  *  - App 内填写了高德 Key(或私有构建时配置了 daka.amapKey)时用高德 Web 服务 API(国内最准);
@@ -38,13 +36,18 @@ data class PoiItem(
  */
 object PoiSearch {
 
-    const val RADIUS_METERS = 300.0
-
     private const val AMAP_PAGE_SIZE = 25
     private const val AMAP_MAX_RESULTS = 100
-    private const val OSM_LIMIT = 40
+    private const val OSM_MAX_RESULTS = 60
     private const val CONNECT_TIMEOUT_MS = 8_000
     private const val READ_TIMEOUT_MS = 10_000
+    private const val OVERPASS_READ_TIMEOUT_MS = 20_000
+
+    /** Overpass 镜像:主节点优先,失败后切备用节点 */
+    private val OVERPASS_ENDPOINTS = listOf(
+        "https://overpass-api.de/api/interpreter",
+        "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+    )
 
     private const val USER_AGENT =
         "DakaCamera/1.1 (https://github.com/zetdgreat/daka-camera)"
@@ -52,7 +55,7 @@ object PoiSearch {
     private val mainHandler = Handler(Looper.getMainLooper())
 
     interface Callback {
-        fun onResult(items: List<PoiItem>, truncated: Boolean)
+        fun onResult(items: List<PoiItem>, truncated: Boolean, usedFallback: Boolean)
         fun onError(message: String)
     }
 
@@ -70,17 +73,52 @@ object PoiSearch {
         }
     }
 
-    fun search(context: Context, lat: Double, lng: Double, callback: Callback): Cancellable {
+    fun search(
+        context: Context,
+        lat: Double,
+        lng: Double,
+        radiusMeters: Int,
+        callback: Callback,
+    ): Cancellable {
         val cancellable = Cancellable()
         val amapKey = AppSettings.resolveAmapKey(context)
+        val radius = radiusMeters.toDouble().coerceIn(50.0, 1000.0)
         Thread {
             try {
-                val (items, truncated) =
-                    if (amapKey.isNotBlank()) searchAmap(cancellable, amapKey, lat, lng)
-                    else searchOsm(cancellable, lat, lng)
+                var usedFallback = false
+                val (items, truncated) = if (amapKey.isNotBlank()) {
+                    try {
+                        searchAmap(cancellable, amapKey, lat, lng, radius)
+                    } catch (t: Throwable) {
+                        if (cancellable.cancelled) throw t
+                        // 高德 Key 过期 / 不可用 / 请求失败:自动回退默认数据源
+                        usedFallback = true
+                        try {
+                            searchOsm(cancellable, lat, lng, radius)
+                        } catch (e: Throwable) {
+                            if (cancellable.cancelled) throw e
+                            throw IllegalStateException(
+                                "高德 Key 不可用,且 OpenStreetMap 服务暂时不可用。" +
+                                        "请检查 Key,或稍后重试。"
+                            )
+                        }
+                    }
+                } else {
+                    try {
+                        searchOsm(cancellable, lat, lng, radius)
+                    } catch (e: Throwable) {
+                        if (cancellable.cancelled) throw e
+                        throw IllegalStateException(
+                            "OpenStreetMap 服务暂时不可用。" +
+                                    "可在设置中填写免费的高德 Key,或稍后重试。"
+                        )
+                    }
+                }
                 if (cancellable.cancelled) return@Thread
                 mainHandler.post {
-                    if (!cancellable.cancelled) callback.onResult(items, truncated)
+                    if (!cancellable.cancelled) {
+                        callback.onResult(items, truncated, usedFallback)
+                    }
                 }
             } catch (t: Throwable) {
                 if (cancellable.cancelled) return@Thread
@@ -93,47 +131,99 @@ object PoiSearch {
         return cancellable
     }
 
-    // ---------------- OpenStreetMap Nominatim ----------------
+    // ---------------- OpenStreetMap(Overpass API,免注册) ----------------
 
     private fun searchOsm(
         c: Cancellable,
         lat: Double,
         lng: Double,
+        radius: Double,
     ): Pair<List<PoiItem>, Boolean> {
-        val dLat = RADIUS_METERS / 111_320.0
-        val dLng = RADIUS_METERS / (111_320.0 * cos(Math.toRadians(lat)).coerceAtLeast(0.01))
-        val viewbox = String.format(
-            Locale.US, "%f,%f,%f,%f",
-            lng - dLng, lat + dLat, lng + dLng, lat - dLat
-        )
-        val url = URL(
-            "https://nominatim.openstreetmap.org/search?format=jsonv2&bounded=1" +
-                    "&viewbox=$viewbox&limit=$OSM_LIMIT&addressdetails=1&namedetails=1" +
-                    "&accept-language=zh-CN&dedupe=1"
-        )
-        val body = get(
-            c, url,
-            mapOf("User-Agent" to USER_AGENT, "Accept" to "application/json")
-        )
-        val arr = JSONArray(body)
-        val items = ArrayList<PoiItem>()
-        for (i in 0 until arr.length()) {
-            val o = arr.optJSONObject(i) ?: continue
-            val pLat = o.optString("lat").toDoubleOrNull() ?: continue
-            val pLng = o.optString("lon").toDoubleOrNull() ?: continue
-            val distance = GeoUtils.distanceMeters(lat, lng, pLat, pLng)
-            if (distance > RADIUS_METERS + 0.5) continue
+        val radiusInt = radius.toInt()
+        val query = "[out:json][timeout:15];" +
+                "(node(around:$radiusInt,$lat,$lng)[name];" +
+                "way(around:$radiusInt,$lat,$lng)[name];" +
+                "relation(around:$radiusInt,$lat,$lng)[name];);" +
+                "out center $OSM_MAX_RESULTS;"
+        val encoded = URLEncoder.encode(query, "UTF-8")
 
-            val display = o.optString("display_name").trim()
-            val name = o.optJSONObject("namedetails")?.optString("name")?.trim()
-                ?.takeIf { it.isNotBlank() }
-                ?: o.optString("name").trim().takeIf { it.isNotBlank() }
-                ?: display.substringBefore(',').trim().ifBlank { "未命名地点" }
-            items.add(PoiItem(name, display, pLat, pLng, distance))
+        var lastError: Throwable? = null
+        for (base in OVERPASS_ENDPOINTS) {
+            if (c.cancelled) throw InterruptedException()
+            try {
+                val body = get(
+                    c,
+                    URL("$base?data=$encoded"),
+                    mapOf("User-Agent" to USER_AGENT, "Accept" to "application/json"),
+                    readTimeoutMs = OVERPASS_READ_TIMEOUT_MS,
+                )
+                return parseOverpass(body, lat, lng, radius)
+            } catch (t: Throwable) {
+                if (c.cancelled) throw t
+                lastError = t
+            }
+        }
+        throw lastError ?: IllegalStateException("附近地点搜索失败")
+    }
+
+    private fun parseOverpass(
+        body: String,
+        lat: Double,
+        lng: Double,
+        radius: Double,
+    ): Pair<List<PoiItem>, Boolean> {
+        val root = JSONObject(body)
+        val elements = root.optJSONArray("elements") ?: JSONArray()
+        val items = ArrayList<PoiItem>()
+        for (i in 0 until elements.length()) {
+            val element = elements.optJSONObject(i) ?: continue
+            val tags = element.optJSONObject("tags") ?: continue
+            val name = tags.optString("name").trim()
+            if (name.isBlank()) continue
+            val position = elementPosition(element) ?: continue
+            val distance = GeoUtils.distanceMeters(lat, lng, position.first, position.second)
+            if (distance > radius + 0.5) continue
+            items.add(
+                PoiItem(
+                    name = name,
+                    address = osmAddress(tags),
+                    lat = position.first,
+                    lng = position.second,
+                    distanceMeters = distance,
+                )
+            )
         }
         items.sortBy { it.distanceMeters }
         val dedup = items.distinctBy { "${it.name}|${it.lat}|${it.lng}" }
-        return dedup to false
+        val truncated = elements.length() >= OSM_MAX_RESULTS
+        return dedup.take(OSM_MAX_RESULTS) to truncated
+    }
+
+    /** 节点取 lat/lon,way/relation 取 center */
+    private fun elementPosition(element: JSONObject): Pair<Double, Double>? {
+        if (element.has("lat") && element.has("lon")) {
+            val lat = element.optDouble("lat", Double.NaN)
+            val lon = element.optDouble("lon", Double.NaN)
+            if (!lat.isNaN() && !lon.isNaN()) return lat to lon
+        }
+        val center = element.optJSONObject("center") ?: return null
+        val lat = center.optDouble("lat", Double.NaN)
+        val lon = center.optDouble("lon", Double.NaN)
+        return if (!lat.isNaN() && !lon.isNaN()) lat to lon else null
+    }
+
+    private fun osmAddress(tags: JSONObject): String {
+        val street = tags.optString("addr:street").trim()
+        val number = tags.optString("addr:housenumber").trim()
+        val suburb = tags.optString("addr:suburb").trim()
+        val city = tags.optString("addr:city").trim()
+        val parts = ArrayList<String>(3)
+        if (street.isNotBlank()) {
+            parts.add(if (number.isNotBlank()) "$street $number" else street)
+        }
+        if (suburb.isNotBlank() && suburb != street) parts.add(suburb)
+        if (city.isNotBlank() && city != suburb) parts.add(city)
+        return parts.joinToString(" ")
     }
 
     // ---------------- 高德 Web 服务「周边搜索」 ----------------
@@ -143,6 +233,7 @@ object PoiSearch {
         apiKey: String,
         lat: Double,
         lng: Double,
+        radius: Double,
     ): Pair<List<PoiItem>, Boolean> {
         val key = URLEncoder.encode(apiKey, "UTF-8")
         val items = ArrayList<PoiItem>()
@@ -153,7 +244,7 @@ object PoiSearch {
         while (page <= maxPages) {
             val url = URL(
                 "https://restapi.amap.com/v3/place/around?key=$key" +
-                        "&location=$lng,$lat&radius=${RADIUS_METERS.toInt()}" +
+                        "&location=$lng,$lat&radius=${radius.toInt()}" +
                         "&sortrule=distance&offset=$AMAP_PAGE_SIZE&page=$page&extensions=base"
             )
             val body = get(c, url, mapOf("Accept" to "application/json"))
@@ -173,7 +264,7 @@ object PoiSearch {
                 val pLng = parts[0].toDoubleOrNull() ?: continue
                 val pLat = parts[1].toDoubleOrNull() ?: continue
                 val distance = GeoUtils.distanceMeters(lat, lng, pLat, pLng)
-                if (distance > RADIUS_METERS + 0.5) continue
+                if (distance > radius + 0.5) continue
 
                 val name = poi.optString("name").trim().ifBlank { "未命名地点" }
                 val address = poi.optString("address").trim().let {
@@ -197,13 +288,14 @@ object PoiSearch {
         c: Cancellable,
         url: URL,
         headers: Map<String, String>,
+        readTimeoutMs: Int = READ_TIMEOUT_MS,
     ): String {
         var conn: HttpURLConnection? = null
         try {
             conn = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
                 connectTimeout = CONNECT_TIMEOUT_MS
-                readTimeout = READ_TIMEOUT_MS
+                readTimeout = readTimeoutMs
                 instanceFollowRedirects = true
                 headers.forEach { (k, v) -> setRequestProperty(k, v) }
             }

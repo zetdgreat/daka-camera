@@ -2,51 +2,150 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#000000">
+    android:background="#FFFFFF">
 
-    <androidx.camera.view.PreviewView
-        android:id="@+id/previewView"
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_height="match_parent"
+        android:orientation="vertical">
 
-    <!-- 实时水印层:与成片共用同一套绘制逻辑 -->
-    <com.family.dakacamera.WatermarkOverlayView
-        android:id="@+id/watermarkOverlay"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        <!-- 顶部操作区(白色):设置 / 验真 -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:background="#FFFFFF">
 
-    <TextView
-        android:id="@+id/statusChip"
+            <ImageButton
+                android:id="@+id/settingsEntry"
+                android:layout_width="46dp"
+                android:layout_height="46dp"
+                android:layout_gravity="start|center_vertical"
+                android:layout_marginStart="16dp"
+                android:background="@null"
+                android:contentDescription="@string/settings"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_settings" />
+
+            <ImageButton
+                android:id="@+id/verifyEntry"
+                android:layout_width="46dp"
+                android:layout_height="46dp"
+                android:layout_gravity="end|center_vertical"
+                android:layout_marginEnd="16dp"
+                android:background="@null"
+                android:contentDescription="@string/verify_entry_desc"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_verify" />
+        </FrameLayout>
+
+        <!-- 取景区:3:4,与竖屏成片比例一致;上下留白作为操作区 -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:background="#FFFFFF">
+
+            <com.family.dakacamera.AspectRatioFrameLayout
+                android:id="@+id/previewContainer"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_gravity="center">
+
+                <androidx.camera.view.PreviewView
+                    android:id="@+id/previewView"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent" />
+
+                <com.family.dakacamera.WatermarkOverlayView
+                    android:id="@+id/watermarkOverlay"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent" />
+            </com.family.dakacamera.AspectRatioFrameLayout>
+        </FrameLayout>
+
+        <!-- 底部操作区(白色):快门 / 前后摄 -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="150dp"
+            android:background="#FFFFFF">
+
+            <FrameLayout
+                android:id="@+id/openGallery"
+                android:layout_width="54dp"
+                android:layout_height="54dp"
+                android:layout_gravity="start|center_vertical"
+                android:layout_marginStart="36dp"
+                android:background="@drawable/bg_gallery_ring"
+                android:clickable="true"
+                android:contentDescription="@string/gallery_desc"
+                android:focusable="true">
+
+                <!-- 默认占位图标;有照片后替换为最新照片的圆形缩略图 -->
+                <ImageView
+                    android:id="@+id/galleryThumb"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_margin="2dp"
+                    android:contentDescription="@string/gallery_desc"
+                    android:scaleType="centerCrop"
+                    android:src="@drawable/ic_gallery" />
+            </FrameLayout>
+
+            <ImageButton
+                android:id="@+id/shutter"
+                android:layout_width="86dp"
+                android:layout_height="86dp"
+                android:layout_gravity="center"
+                android:background="@null"
+                android:contentDescription="@string/shutter_desc"
+                android:src="@drawable/ic_shutter" />
+
+            <ImageButton
+                android:id="@+id/switchCamera"
+                android:layout_width="54dp"
+                android:layout_height="54dp"
+                android:layout_gravity="end|center_vertical"
+                android:layout_marginEnd="36dp"
+                android:background="@null"
+                android:contentDescription="@string/switch_camera_desc"
+                android:src="@drawable/ic_switch_camera" />
+        </FrameLayout>
+    </LinearLayout>
+
+    <!-- 注意安全:在预览上方白色区域内上下左右居中(位置由代码按实际取景区域计算) -->
+    <LinearLayout
+        android:id="@+id/safetyNotice"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="top|center_horizontal"
-        android:layout_marginTop="68dp"
-        android:background="@drawable/bg_chip"
-        android:paddingStart="16dp"
-        android:paddingTop="8dp"
-        android:paddingEnd="16dp"
-        android:paddingBottom="8dp"
-        android:textColor="#FFFFFF"
-        android:textSize="13sp"
-        android:visibility="gone" />
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:translationY="3dp">
 
-    <ImageButton
-        android:id="@+id/verifyEntry"
-        android:layout_width="46dp"
-        android:layout_height="46dp"
-        android:layout_gravity="top|end"
-        android:layout_margin="16dp"
-        android:background="@null"
-        android:contentDescription="@string/verify_entry_desc"
-        android:scaleType="fitCenter"
-        android:src="@drawable/ic_verify" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="serif"
+            android:letterSpacing="0.18"
+            android:text="@string/safety_notice"
+            android:textColor="#222222"
+            android:textSize="22sp"
+            android:textStyle="bold" />
 
+        <View
+            android:layout_width="30dp"
+            android:layout_height="2dp"
+            android:layout_marginTop="4dp"
+            android:background="#FFD400" />
+    </LinearLayout>
+
+    <!-- 定位校准:右边缘、中部靠下,单手可达 -->
     <TextView
         android:id="@+id/calibrateLocation"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="top|start"
-        android:layout_margin="16dp"
+        android:layout_gravity="end|center_vertical"
+        android:layout_marginEnd="16dp"
         android:background="@drawable/bg_chip"
         android:clickable="true"
         android:focusable="true"
@@ -56,33 +155,22 @@
         android:paddingBottom="8dp"
         android:text="@string/calibrate_location"
         android:textColor="#FFFFFF"
-        android:textSize="13sp" />
+        android:textSize="13sp"
+        android:translationY="90dp" />
 
-    <FrameLayout
-        android:layout_width="match_parent"
-        android:layout_height="150dp"
-        android:layout_gravity="bottom">
-
-        <ImageButton
-            android:id="@+id/shutter"
-            android:layout_width="86dp"
-            android:layout_height="86dp"
-            android:layout_gravity="bottom|center_horizontal"
-            android:layout_marginBottom="30dp"
-            android:background="@null"
-            android:contentDescription="@string/shutter_desc"
-            android:src="@drawable/ic_shutter" />
-
-        <ImageButton
-            android:id="@+id/switchCamera"
-            android:layout_width="54dp"
-            android:layout_height="54dp"
-            android:layout_gravity="bottom|end"
-            android:layout_marginEnd="36dp"
-            android:layout_marginBottom="46dp"
-            android:background="@null"
-            android:contentDescription="@string/switch_camera_desc"
-            android:src="@drawable/ic_switch_camera" />
-    </FrameLayout>
+    <TextView
+        android:id="@+id/statusChip"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="100dp"
+        android:background="@drawable/bg_chip"
+        android:paddingStart="16dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="8dp"
+        android:textColor="#FFFFFF"
+        android:textSize="13sp"
+        android:visibility="gone" />
 
 </FrameLayout>
