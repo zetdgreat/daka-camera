@@ -25,7 +25,7 @@ data class PoiItem(
 }
 
 /**
- * 指定半径内的地点搜索(半径可在设置中选择 100~500 米)。
+ * 指定半径内的地点搜索(半径可在设置中拖拽选择 5~300 米)。
  *
  * 数据源:
  *  - App 内填写了高德 Key(或私有构建时配置了 daka.amapKey)时用高德 Web 服务 API(国内最准);
@@ -37,8 +37,8 @@ data class PoiItem(
 object PoiSearch {
 
     private const val AMAP_PAGE_SIZE = 25
-    private const val AMAP_MAX_RESULTS = 100
-    private const val OSM_MAX_RESULTS = 60
+    private const val AMAP_MAX_RESULTS = 200
+    private const val OSM_MAX_RESULTS = 150
     private const val CONNECT_TIMEOUT_MS = 8_000
     private const val READ_TIMEOUT_MS = 10_000
     private const val OVERPASS_READ_TIMEOUT_MS = 20_000
@@ -82,7 +82,7 @@ object PoiSearch {
     ): Cancellable {
         val cancellable = Cancellable()
         val amapKey = AppSettings.resolveAmapKey(context)
-        val radius = radiusMeters.toDouble().coerceIn(50.0, 1000.0)
+        val radius = radiusMeters.toDouble().coerceIn(5.0, 300.0)
         Thread {
             try {
                 var usedFallback = false

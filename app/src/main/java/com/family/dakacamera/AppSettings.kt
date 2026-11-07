@@ -15,7 +15,10 @@ object AppSettings {
     private const val KEY_AMAP = "amap_web_key"
     private const val KEY_SEARCH_RADIUS = "search_radius"
 
-    private val ALLOWED_RADII = listOf(100, 200, 300, 400, 500)
+    const val MIN_SEARCH_RADIUS = 5
+    const val MAX_SEARCH_RADIUS = 300
+    const val SEARCH_RADIUS_STEP = 5
+    private const val DEFAULT_SEARCH_RADIUS = 50
 
     fun resolveAmapKey(ctx: Context): String =
         getAmapKey(ctx).ifBlank { BuildConfig.AMAP_KEY }
@@ -33,18 +36,18 @@ object AppSettings {
             .apply()
     }
 
-    /** 定位校准的搜索半径(米),默认 300 */
+    /** 定位校准的搜索半径(米),范围 30~300,默认 300 */
     fun getSearchRadius(ctx: Context): Int {
         val value = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getInt(KEY_SEARCH_RADIUS, 300)
-        return if (value in ALLOWED_RADII) value else 300
+            .getInt(KEY_SEARCH_RADIUS, DEFAULT_SEARCH_RADIUS)
+        return value.coerceIn(MIN_SEARCH_RADIUS, MAX_SEARCH_RADIUS)
     }
 
     fun setSearchRadius(ctx: Context, meters: Int) {
-        if (meters !in ALLOWED_RADII) return
+        val clamped = meters.coerceIn(MIN_SEARCH_RADIUS, MAX_SEARCH_RADIUS)
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit()
-            .putInt(KEY_SEARCH_RADIUS, meters)
+            .putInt(KEY_SEARCH_RADIUS, clamped)
             .apply()
     }
 }

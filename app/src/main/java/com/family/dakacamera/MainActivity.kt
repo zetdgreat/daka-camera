@@ -10,7 +10,6 @@ import android.graphics.BitmapShader
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Shader
-import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.util.Size
@@ -23,10 +22,11 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.ArrayAdapter
-import android.widget.FrameLayout
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.ListView
 import android.widget.ProgressBar
+import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -556,28 +556,26 @@ class MainActivity : AppCompatActivity() {
         input.setText(AppSettings.getAmapKey(this))
         val dialog = AlertDialog.Builder(this).setView(view).create()
 
-        val radiusViews = listOf(
-            100 to view.findViewById<TextView>(R.id.radius100),
-            200 to view.findViewById<TextView>(R.id.radius200),
-            300 to view.findViewById<TextView>(R.id.radius300),
-            400 to view.findViewById<TextView>(R.id.radius400),
-            500 to view.findViewById<TextView>(R.id.radius500),
-        )
-        fun renderRadius(selected: Int) {
-            radiusViews.forEach { (meters, tv) ->
-                tv.setTextColor(
-                    if (meters == selected) 0xFFFFD400.toInt() else 0xFFAAAAAA.toInt()
-                )
-                tv.setTypeface(null, if (meters == selected) Typeface.BOLD else Typeface.NORMAL)
+        val radiusSeek = view.findViewById<SeekBar>(R.id.radiusSeek)
+        val radiusValue = view.findViewById<TextView>(R.id.radiusValue)
+        val initialRadius = AppSettings.getSearchRadius(this)
+        radiusSeek.max = (AppSettings.MAX_SEARCH_RADIUS - AppSettings.MIN_SEARCH_RADIUS) /
+                AppSettings.SEARCH_RADIUS_STEP
+        radiusSeek.progress = (initialRadius - AppSettings.MIN_SEARCH_RADIUS) /
+                AppSettings.SEARCH_RADIUS_STEP
+        radiusValue.text = getString(R.string.radius_value_fmt, initialRadius)
+        radiusSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                val meters = AppSettings.MIN_SEARCH_RADIUS +
+                        progress * AppSettings.SEARCH_RADIUS_STEP
+                radiusValue.text = getString(R.string.radius_value_fmt, meters)
+                AppSettings.setSearchRadius(this@MainActivity, meters)
             }
-        }
-        renderRadius(AppSettings.getSearchRadius(this))
-        radiusViews.forEach { (meters, tv) ->
-            tv.setOnClickListener {
-                AppSettings.setSearchRadius(this, meters)
-                renderRadius(meters)
-            }
-        }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+
+            override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+        })
 
         view.findViewById<View>(R.id.amapKeyClear).setOnClickListener {
             AppSettings.setAmapKey(this, "")
