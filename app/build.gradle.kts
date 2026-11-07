@@ -34,8 +34,8 @@ android {
         applicationId = "com.family.dakacamera"
         minSdk = 24
         targetSdk = 34
-        versionCode = 5
-        versionName = "1.4"
+        versionCode = 9
+        versionName = "1.7.1"
 
         buildConfigField("String", "AMAP_KEY", "\"$amapKey\"")
     }

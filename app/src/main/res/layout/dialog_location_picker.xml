@@ -31,6 +31,15 @@
         android:textColor="#888888"
         android:textSize="12sp" />
 
+    <TextView
+        android:id="@+id/poiAccuracy"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:textColor="#888888"
+        android:textSize="12sp"
+        android:visibility="gone" />
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

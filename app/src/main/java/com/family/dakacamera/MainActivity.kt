@@ -37,6 +37,7 @@ import com.family.dakacamera.databinding.ActivityMainBinding
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
 
 class MainActivity : AppCompatActivity() {
 
@@ -305,6 +306,28 @@ class MainActivity : AppCompatActivity() {
         binding.shutter.isEnabled = true
     }
 
+    /**
+     * 部分 POI(如小店)高德没有街道地址,选中后用一次逆地理编码补全。
+     * 只对缺街道地址的地点触发,避免批量请求。
+     */
+    private fun enrichManualLocation(item: PoiItem) {
+        if (item.address.isNotBlank()) return
+        Thread {
+            val detail = LocationHelper.reverseGeocode(this, item.lat, item.lng)
+            if (!detail.isNullOrBlank()) {
+                runOnUiThread {
+                    val current = manualLocation
+                    if (current != null &&
+                        current.lat == item.lat && current.lng == item.lng
+                    ) {
+                        manualLocation = current.copy(address = detail, fullAddress = detail)
+                        updateOverlayIfNeeded(force = true)
+                    }
+                }
+            }
+        }.apply { isDaemon = true }.start()
+    }
+
     // ---------------- 相册 ----------------
 
     /** 更新左下角相册按钮:显示最新照片的圆形缩略图;没有照片时显示占位图标 */
@@ -434,6 +457,7 @@ class MainActivity : AppCompatActivity() {
         val listView = view.findViewById<ListView>(R.id.poiList)
         val retry = view.findViewById<TextView>(R.id.poiRetry)
         val source = view.findViewById<TextView>(R.id.poiSource)
+        val accuracyView = view.findViewById<TextView>(R.id.poiAccuracy)
         val hint = view.findViewById<TextView>(R.id.poiHint)
         val radius = AppSettings.getSearchRadius(this)
         hint.text = getString(R.string.pick_location_hint_fmt, radius)
@@ -468,7 +492,20 @@ class MainActivity : AppCompatActivity() {
             listView.visibility = View.GONE
         }
 
-        fun doSearch(lat: Double, lng: Double) {
+        fun showAccuracy(accuracy: Float) {
+            if (accuracy > 0f) {
+                accuracyView.text = getString(
+                    R.string.location_accuracy_fmt,
+                    accuracy.roundToInt(),
+                )
+                accuracyView.visibility = View.VISIBLE
+            } else {
+                accuracyView.visibility = View.GONE
+            }
+        }
+
+        fun doSearch(lat: Double, lng: Double, accuracy: Float = 0f) {
+            showAccuracy(accuracy)
             showLoading(getString(R.string.searching_nearby_fmt, radius))
             poiSearch = PoiSearch.search(
                 this@MainActivity, lat, lng, radius,
@@ -508,18 +545,16 @@ class MainActivity : AppCompatActivity() {
         fun startSearch() {
             poiSearch?.cancel()
             poiSearch = null
-            val last = locationHelper.last
-            if (last != null && System.currentTimeMillis() - last.timeMs < 60_000) {
-                doSearch(last.lat, last.lng)
-            } else if (!locationHelper.hasPermission()) {
+            if (!locationHelper.hasPermission()) {
                 showError("未获得定位权限,无法搜索附近地点")
-            } else {
-                showLoading("正在获取当前位置…")
-                locationHelper.resolve { info ->
-                    if (!dialog.isShowing) return@resolve
-                    if (info == null) showError("未获取到当前位置,请稍后重试")
-                    else doSearch(info.lat, info.lng)
-                }
+                return
+            }
+            // 定位校准每次都重新定位,并取精度最高的结果,不使用缓存
+            showLoading("正在获取高精度位置…")
+            locationHelper.resolveBest { info ->
+                if (!dialog.isShowing) return@resolveBest
+                if (info == null) showError("未获取到当前位置,请确认定位已开启")
+                else doSearch(info.lat, info.lng, info.accuracyMeters)
             }
         }
 
@@ -529,6 +564,7 @@ class MainActivity : AppCompatActivity() {
             updateOverlayIfNeeded(force = true)
             toast("已选择:${item.name}")
             dialog.dismiss()
+            enrichManualLocation(item)
         }
         view.findViewById<View>(R.id.poiReset).setOnClickListener {
             manualLocation = null
@@ -605,9 +641,10 @@ class MainActivity : AppCompatActivity() {
             view.findViewById<TextView>(R.id.poiName).text = item.name
             view.findViewById<TextView>(R.id.poiDetail).text = buildString {
                 append(String.format(Locale.US, "%.0f 米", item.distanceMeters))
-                if (item.address.isNotBlank()) {
+                val detail = item.fullAddress.ifBlank { item.address }
+                if (detail.isNotBlank()) {
                     append(" · ")
-                    append(item.address)
+                    append(detail)
                 }
             }
             return view

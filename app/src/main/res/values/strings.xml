@@ -27,6 +27,7 @@
     <string name="data_source_osm">数据源:OpenStreetMap(免注册)</string>
     <string name="data_source_amap">数据源:高德 Web 服务</string>
     <string name="data_source_fallback">数据源:OpenStreetMap(高德 Key 不可用,已自动切换)</string>
+    <string name="location_accuracy_fmt">定位精度 ±%1$d 米</string>
     <string name="search_radius_section">地点搜索半径(米)</string>
     <string name="search_radius_hint">定位校准列表只显示该范围内的地点,可拖拽选择 5~300 米,默认 50 米</string>
     <string name="radius_value_fmt">%1$d 米</string>
